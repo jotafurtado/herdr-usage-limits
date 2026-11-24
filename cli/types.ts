@@ -1,7 +1,7 @@
 // Shapes shared with quota-axi --json (schemaVersion 5). Only the fields the mod reads are typed;
 // everything else quota-axi reports passes through untouched.
 
-export interface QuotaWindow {
+export interface LimitWindow {
   id: string;
   label: string;
   kind: string;
@@ -24,12 +24,12 @@ export interface ProviderReport {
   label?: string;
   plan?: string;
   source?: string;
-  windows: QuotaWindow[];
+  windows: LimitWindow[];
   state?: ProviderState;
   [extra: string]: unknown;
 }
 
-export interface QuotaReport {
+export interface UsageReport {
   generatedAt: string;
   schemaVersion?: number;
   providers: ProviderReport[];
@@ -59,7 +59,7 @@ export interface ProviderAdapter {
   read(context: AdapterContext): Promise<ProviderReport>;
 }
 
-export interface QuotaPlusSettings {
+export interface UsageLimitsSettings {
   // Providers whose own adapter always replaces quota-axi.
   force: string[];
   // Providers whose own adapter never runs.

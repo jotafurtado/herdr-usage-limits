@@ -1,4 +1,4 @@
-import type { AdapterContext, FallbackRecord, ProviderAdapter, ProviderReport, QuotaPlusSettings, QuotaReport } from "./types.js";
+import type { AdapterContext, FallbackRecord, ProviderAdapter, ProviderReport, UsageLimitsSettings, UsageReport } from "./types.js";
 
 const FAILED_STATUSES = new Set(["auth_required", "error", "unavailable"]);
 
@@ -13,11 +13,11 @@ export function fallbackReason(provider: ProviderReport | undefined, forced: boo
 // quota-axi stays the source of truth. A provider is handed to our adapter only when quota-axi
 // failed to read it (or the settings force it); if our adapter fails too, quota-axi's entry stays.
 export async function mergeReports(
-  base: QuotaReport | undefined,
+  base: UsageReport | undefined,
   adapters: ProviderAdapter[],
-  settings: QuotaPlusSettings,
+  settings: UsageLimitsSettings,
   context: AdapterContext,
-): Promise<{ report: QuotaReport; fallbacks: FallbackRecord[] }> {
+): Promise<{ report: UsageReport; fallbacks: FallbackRecord[] }> {
   const providers = [...(base?.providers ?? [])];
   const fallbacks: FallbackRecord[] = [];
   const active = adapters.filter(adapter => !settings.disable.includes(adapter.id));
@@ -48,7 +48,7 @@ export async function mergeReports(
     }
     const error = own.state?.error ?? own.state?.status ?? "no windows";
     // Nothing better than quota-axi: keep its entry (or ours, when quota-axi had none) and say why.
-    if (current) providers[index] = { ...current, quotaPlusError: error };
+    if (current) providers[index] = { ...current, usageLimitsError: error };
     else providers.push(own);
     fallbacks.push({ provider: adapter.id, reason, outcome: "kept_quota_axi", error });
   }

@@ -56,7 +56,7 @@ test("when our adapter also fails, quota-axi's entry stays with the reason attac
   const adapter = { id: "claude", read: async () => { throw new Error("boom"); } };
   const { report, fallbacks } = await mergeReports(base, [adapter], noSettings, context());
   assert.equal(report.providers[0].state.status, "auth_required");
-  assert.equal(report.providers[0].quotaPlusError, "boom");
+  assert.equal(report.providers[0].usageLimitsError, "boom");
   assert.equal(fallbacks[0].outcome, "kept_quota_axi");
 });
 
@@ -110,7 +110,7 @@ test("claude adapter reads the macOS Keychain and calls the usage endpoint", asy
   }));
   assert.equal(auth, "Bearer token");
   assert.equal(report.plan, "max");
-  assert.equal(report.source, "quota-plus:keychain");
+  assert.equal(report.source, "usage-limits:keychain");
   assert.equal(report.windows[0].percentUsed, 20);
 });
 
@@ -133,9 +133,9 @@ test("claude adapter maps 401 to auth_required", async () => {
 
 test("settings merge the config file with the environment", async () => {
   const settings = await loadSettings({
-    env: { QUOTA_PLUS_FORCE: "codex, claude" },
+    env: { USAGE_LIMITS_FORCE: "codex, claude" },
     homeDirectory: "/home/tester",
-    readTextFile: async path => path === "/home/tester/.config/quota-plus/config.json" ? '{"force":["claude"],"disable":["x"]}' : undefined,
+    readTextFile: async path => path === "/home/tester/.config/usage-limits/config.json" ? '{"force":["claude"],"disable":["x"]}' : undefined,
   });
   assert.deepEqual(settings, { force: ["claude", "codex"], disable: ["x"] });
 });

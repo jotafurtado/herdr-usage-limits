@@ -1,9 +1,9 @@
-import type { CommandRunner, QuotaReport } from "./types.js";
+import type { CommandRunner, UsageReport } from "./types.js";
 
 const QUOTA_AXI_TIMEOUT_MS = 90_000;
 
 export type QuotaAxiOutcome =
-  | { ok: true; report: QuotaReport }
+  | { ok: true; report: UsageReport }
   | { ok: false; error: string };
 
 export async function readQuotaAxi(runCommand: CommandRunner, extraArgs: string[] = []): Promise<QuotaAxiOutcome> {
@@ -21,10 +21,10 @@ export async function readQuotaAxi(runCommand: CommandRunner, extraArgs: string[
   if (start < 0) return { ok: false, error: "quota-axi printed no JSON" };
   try {
     const parsed: unknown = JSON.parse(result.stdout.slice(start));
-    if (!parsed || typeof parsed !== "object" || !Array.isArray((parsed as QuotaReport).providers)) {
+    if (!parsed || typeof parsed !== "object" || !Array.isArray((parsed as UsageReport).providers)) {
       return { ok: false, error: "quota-axi JSON has no providers list" };
     }
-    return { ok: true, report: parsed as QuotaReport };
+    return { ok: true, report: parsed as UsageReport };
   } catch {
     return { ok: false, error: "quota-axi JSON could not be parsed" };
   }

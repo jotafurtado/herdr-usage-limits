@@ -9,14 +9,14 @@ Herdr asks for a public GitHub repository with the topic `herdr-mod` (singular).
 Each mod package contains:
 
 ```text
-mods/quota/
+mods/usage-limits/
 RECIPE.md
 preview.png
 keys.json       # optional keybinding snippet
 ```
 
 Do not include a `layouts/` folder in the published package. Layout integration instructions
-belong in the recipe and README. This repository distributes one mod: `mods/quota`.
+belong in the recipe and README. This repository distributes one mod: `mods/usage-limits`.
 
 The site says eligible mods appear under Community within an hour and that preview images are
 screened.
@@ -27,7 +27,7 @@ identifies its GitHub query as `topic:herdr-mod is:public`, without `fork:true`.
 A fork would therefore not be discovered automatically by that query. This is an inference
 from the published index metadata, not a documented Herdr fork policy.
 
-On 2026-11-04 `jotafurtado/herdr-quota` was detached from the fork network by recreating it at
+On 2026-11-04 this repository, then named `jotafurtado/herdr-quota`, was detached from the fork network by recreating it at
 the same URL and mirroring the full Git history. It is public and no longer marked as a fork.
 Attribution and licenses remain in [CREDITS.md](CREDITS.md) and [LICENSE](LICENSE).
 
@@ -36,9 +36,9 @@ Attribution and licenses remain in [CREDITS.md](CREDITS.md) and [LICENSE](LICENS
 - Keep `README.md` and `RECIPE.md` aligned with the code users will actually install, including
   commands run, dependencies, saved state, supported platforms and limitations.
 - Refresh `preview.png` when the interface changes. Capture the
-  current source in an isolated Herdr profile with clearly identified illustrative quota data.
+  current source in an isolated Herdr profile with clearly identified illustrative usage data.
   Exclude private terminal text, account identifiers and unrelated application content.
-- Validate the relevant tests and run `herdr-app check mods/quota`. Check the strip and popup
+- Validate the relevant tests and run `herdr-app check mods/usage-limits`. Check the strip and popup
   in Herdr; the initial-render check does not verify asynchronous data fetching or all UI states.
 - Preserve `LICENSE` and `CREDITS.md` and review any newly included third-party assets.
 - Publish the reviewed commit to the public repository and add the topic `herdr-mod`.
@@ -49,7 +49,7 @@ Run these only after the code and screenshot are ready and publication is author
 
 ```sh
 git push origin main
-gh repo edit jotafurtado/herdr-quota --add-topic herdr-mod
+gh repo edit jotafurtado/herdr-usage-limits --add-topic herdr-mod
 ```
 
 Then check the Community section of [Herdr Mods](https://herdr.dev/mods/) after the stated
@@ -58,6 +58,6 @@ or Discord.
 
 ## Description for a future listing
 
-Agent Quota is an independently maintained mod focused on model and provider quotas, usage
-limits and reset times in Herdr. Based on Lakris2407's original mod, with quota data supplied
+Usage Limits is an independently maintained mod focused on model and provider usage limits
+and reset times in Herdr. Based on Lakris2407's original mod, with usage data supplied
 by quota-axi. See the README for the features and platform support available in this version.

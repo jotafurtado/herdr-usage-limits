@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { visibleWindows } from "../mods/quota/quota-windows.js";
+import { visibleWindows } from "../mods/usage-limits/limit-windows.js";
 
 const windows = ["gemini_5h", "gemini_weekly", "claude_gpt_5h", "claude_gpt_weekly"]
   .map(id => ({ id, kind: id.endsWith("weekly") ? "weekly" : "session" }));

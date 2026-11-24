@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { AdapterContext, ProviderAdapter, ProviderReport, QuotaWindow } from "../types.js";
+import type { AdapterContext, ProviderAdapter, ProviderReport, LimitWindow } from "../types.js";
 
 // Same endpoint and headers Claude Code uses for /usage.
 const USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
@@ -89,9 +89,9 @@ function clampPercent(value: number): number {
   return Math.min(100, Math.max(0, Math.round(value * 100) / 100));
 }
 
-function makeWindow(id: string, label: string, kind: string, used: number, resetsAt: string | undefined, windowSeconds: number | undefined): QuotaWindow {
+function makeWindow(id: string, label: string, kind: string, used: number, resetsAt: string | undefined, windowSeconds: number | undefined): LimitWindow {
   const percentUsed = clampPercent(used);
-  const window: QuotaWindow = { id, label, kind, percentUsed, percentRemaining: clampPercent(100 - percentUsed) };
+  const window: LimitWindow = { id, label, kind, percentUsed, percentRemaining: clampPercent(100 - percentUsed) };
   if (resetsAt !== undefined) window.resetsAt = resetsAt;
   if (windowSeconds !== undefined) window.windowSeconds = windowSeconds;
   return window;
@@ -101,7 +101,7 @@ function slugify(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
-function scopedWindow(raw: unknown): QuotaWindow | undefined {
+function scopedWindow(raw: unknown): LimitWindow | undefined {
   const entry = record(raw);
   const percent = finiteNumber(entry?.percent);
   if (!entry || percent === undefined) return undefined;
@@ -116,7 +116,7 @@ function scopedWindow(raw: unknown): QuotaWindow | undefined {
   return makeWindow(kind, kind, "unknown", percent, resetsAt, undefined);
 }
 
-function fixedWindow(raw: unknown, id: string, label: string, kind: string, seconds: number): QuotaWindow | undefined {
+function fixedWindow(raw: unknown, id: string, label: string, kind: string, seconds: number): LimitWindow | undefined {
   const entry = record(raw);
   const used = finiteNumber(entry?.utilization);
   if (!entry || used === undefined) return undefined;
@@ -124,25 +124,25 @@ function fixedWindow(raw: unknown, id: string, label: string, kind: string, seco
 }
 
 // Mirrors quota-axi: the vendor's `limits` list wins; the fixed top-level windows are the fallback.
-export function normalizeUsage(raw: unknown): QuotaWindow[] {
+export function normalizeUsage(raw: unknown): LimitWindow[] {
   const data = record(raw);
   if (!data) return [];
   const scoped = Array.isArray(data.limits)
-    ? data.limits.map(scopedWindow).filter((window): window is QuotaWindow => window !== undefined)
+    ? data.limits.map(scopedWindow).filter((window): window is LimitWindow => window !== undefined)
     : [];
   if (scoped.length > 0) return scoped;
   return [
     fixedWindow(data.five_hour, "five_hour", "session", "session", FIVE_HOURS_SECONDS),
     fixedWindow(data.seven_day, "seven_day", "week", "weekly", SEVEN_DAYS_SECONDS),
     fixedWindow(data.seven_day_opus, "seven_day_opus", "opus week", "model", SEVEN_DAYS_SECONDS),
-  ].filter((window): window is QuotaWindow => window !== undefined);
+  ].filter((window): window is LimitWindow => window !== undefined);
 }
 
 function failure(status: string, error: string, attempts: string[]): ProviderReport {
-  return { provider: "claude", label: "Claude", source: "quota-plus", windows: [], state: { status, stale: false, error }, attempts };
+  return { provider: "claude", label: "Claude", source: "usage-limits", windows: [], state: { status, stale: false, error }, attempts };
 }
 
-async function fetchUsage(context: AdapterContext, credential: ClaudeCredential): Promise<{ windows: QuotaWindow[] } | { status: string; error: string }> {
+async function fetchUsage(context: AdapterContext, credential: ClaudeCredential): Promise<{ windows: LimitWindow[] } | { status: string; error: string }> {
   let response: Response;
   try {
     response = await context.fetch(USAGE_URL, {
@@ -187,7 +187,7 @@ export const claudeAdapter: ProviderAdapter = {
       if ("windows" in result) {
         attempts.push(`${credential.source}: ok`);
         const report: ProviderReport = {
-          provider: "claude", label: "Claude", source: `quota-plus:${credential.source}`,
+          provider: "claude", label: "Claude", source: `usage-limits:${credential.source}`,
           windows: result.windows, state: { status: "fresh", stale: false }, attempts,
         };
         if (credential.plan !== undefined) report.plan = credential.plan;

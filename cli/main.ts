@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// quota-plus: quota-axi's report, with our own adapters filling in the providers it fails to read.
+// usage-limits: quota-axi's report, with our own adapters filling in the providers it fails to read.
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -9,12 +9,12 @@ import { readQuotaAxi } from "./quota-axi.js";
 import { loadSettings } from "./settings.js";
 import type { AdapterContext, CommandResult } from "./types.js";
 
-const USAGE = `usage: quota-plus [--json] [--explain] [quota-axi flags...]
+const USAGE = `usage: usage-limits [--json] [--explain] [quota-axi flags...]
   Runs quota-axi --json --allow-keychain-prompt and replaces each provider quota-axi fails to read
-  (no windows, auth_required, error, unavailable) with quota-plus's own adapter when one exists.
+  (no windows, auth_required, error, unavailable) with usage-limits's own adapter when one exists.
   Adapters: ${ADAPTERS.map(adapter => adapter.id).join(", ")}
   --explain   print which providers fell back and why (stderr)
-  Settings: ~/.config/quota-plus/config.json {"force": [], "disable": []}, QUOTA_PLUS_FORCE, QUOTA_PLUS_DISABLE.`;
+  Settings: ~/.config/usage-limits/config.json {"force": [], "disable": []}, USAGE_LIMITS_FORCE, USAGE_LIMITS_DISABLE.`;
 
 function runCommand(command: string, args: string[], timeoutMs: number): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
@@ -42,7 +42,7 @@ async function main(argv: string[]): Promise<number> {
 
   const [base, settings] = await Promise.all([readQuotaAxi(runCommand, passThrough), loadSettings(context)]);
   const { report, fallbacks } = await mergeReports(base.ok ? base.report : undefined, ADAPTERS, settings, context);
-  report.quotaPlus = { quotaAxi: base.ok ? "ok" : base.error, fallbacks };
+  report.usageLimits = { quotaAxi: base.ok ? "ok" : base.error, fallbacks };
 
   if (explain) {
     if (!base.ok) process.stderr.write(`quota-axi: ${base.error}\n`);
@@ -56,6 +56,6 @@ async function main(argv: string[]): Promise<number> {
 }
 
 main(process.argv.slice(2)).then(code => { process.exitCode = code; }, error => {
-  process.stderr.write(`quota-plus: ${error instanceof Error ? error.message : String(error)}\n`);
+  process.stderr.write(`usage-limits: ${error instanceof Error ? error.message : String(error)}\n`);
   process.exitCode = 1;
 });

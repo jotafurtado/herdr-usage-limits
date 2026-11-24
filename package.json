@@ -1,13 +1,13 @@
 {
-  "name": "herdr-quota",
+  "name": "herdr-usage-limits",
   "version": "0.2.0",
   "private": true,
-  "description": "Agent Quota for Herdr, plus quota-plus: quota-axi with per-provider fallback adapters",
+  "description": "Usage Limits for Herdr, plus usage-limits: quota-axi with per-provider fallback adapters",
   "author": "Jota Furtado",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "quota-plus": "dist/main.js"
+    "usage-limits": "dist/main.js"
   },
   "files": [
     "dist"

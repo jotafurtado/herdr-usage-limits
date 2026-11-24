@@ -1,16 +1,16 @@
-// Prefer quota-plus (quota-axi plus our per-provider fallbacks, from this repository's cli/),
-// and use quota-axi directly when quota-plus is not installed.
+// Prefer usage-limits (quota-axi plus our per-provider fallbacks, from this repository's cli/),
+// and use quota-axi directly when usage-limits is not installed.
 // npm installs a .cmd shim on Windows, which cannot be spawned as a native executable.
 // Keep exec injectable so the fallbacks and machine forwarding can be checked without Herdr.
 export const COMMANDS = [
-  ["quota-plus", ["--json"]],
+  ["usage-limits", ["--json"]],
   ["quota-axi", ["--json", "--allow-keychain-prompt"]],
 ];
 
 // Login-shell fallback for apps started from the Dock, which miss PATH entries set in rc files.
-export const SHELL_SCRIPT = 'if command -v quota-plus >/dev/null 2>&1; then exec quota-plus --json; else exec quota-axi --json --allow-keychain-prompt; fi';
+export const SHELL_SCRIPT = 'if command -v usage-limits >/dev/null 2>&1; then exec usage-limits --json; else exec quota-axi --json --allow-keychain-prompt; fi';
 
-export async function runQuotaCommand(exec, options = {}) {
+export async function runUsageCommand(exec, options = {}) {
   let firstError;
   for (const [command, args] of COMMANDS) {
     try {
