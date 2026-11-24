@@ -77,6 +77,9 @@ usage-limits --explain                                #  JSON on stdout, fallbac
 
 Adapters: `claude` (environment token, `~/.claude/.credentials.json` or the macOS Keychain, then
 Anthropic's OAuth usage endpoint). It never refreshes tokens, which would sign Claude Code out.
+A token from `claude setup-token` only has the inference scope, so the usage endpoint refuses it.
+When Claude can't be read, the report carries a `notice` (`message` and `action`), and the mod keeps
+Claude in the strip with **Run /login**, explaining why in the tooltip and in the popup.
 To always use an adapter, or never, set `{"force": ["claude"], "disable": []}` in
 `~/.config/usage-limits/config.json`, or `USAGE_LIMITS_FORCE` / `USAGE_LIMITS_DISABLE`.
 To add one, write `cli/providers/<id>.ts` implementing `ProviderAdapter` and register it in

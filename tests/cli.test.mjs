@@ -122,13 +122,43 @@ test("claude adapter never uses an expired token", async () => {
   assert.match(report.state.error, /token_expired/);
 });
 
-test("claude adapter maps 401 to auth_required", async () => {
+test("claude adapter maps 401 on a stored sign-in to auth_required", async () => {
+  const blob = JSON.stringify({ claudeAiOauth: { accessToken: "token", expiresAt: NOW + 60000 } });
   const report = await claudeAdapter.read(context({
-    env: { CLAUDE_CODE_OAUTH_TOKEN: "env-token" },
+    readTextFile: async () => blob,
     fetch: async () => new Response("{}", { status: 401 }),
   }));
   assert.equal(report.state.status, "auth_required");
   assert.equal(report.state.error, "unauthorized");
+  assert.equal(report.notice.action, "Run /login in Claude Code");
+});
+
+test("a setup token rejected by the usage endpoint asks for /login, even after a signed-out Keychain", async () => {
+  const signedOut = JSON.stringify({ claudeAiOauth: { accessToken: "", loginEnded: "1763812681" } });
+  for (const status of [401, 403]) {
+    const report = await claudeAdapter.read(context({
+      env: { USER: "tester", CLAUDE_CODE_OAUTH_TOKEN: "setup-token" },
+      readTextFile: async () => signedOut,
+      fetch: async () => new Response("{}", { status }),
+    }));
+    assert.equal(report.state.error, "setup_token_without_usage_scope");
+    assert.deepEqual(report.notice, { message: "A setup token can't read usage limits.", action: "Run /login in Claude Code" });
+  }
+});
+
+test("a signed-out Keychain asks for /login and mentions the setup token", async () => {
+  const signedOut = JSON.stringify({ claudeAiOauth: { accessToken: "", loginEnded: "1763812681" } });
+  const report = await claudeAdapter.read(context({ readTextFile: async () => signedOut }));
+  assert.equal(report.notice.action, "Run /login in Claude Code");
+  assert.match(report.notice.message, /setup token/);
+});
+
+test("the notice reaches the kept quota-axi entry", async () => {
+  const notice = { message: "A setup token can't read usage limits.", action: "Run /login in Claude Code" };
+  const base = { generatedAt: "x", providers: [{ provider: "claude", windows: [], state: { status: "auth_required" } }] };
+  const own = { provider: "claude", windows: [], state: { status: "auth_required", error: "setup_token_without_usage_scope" }, notice };
+  const { report } = await mergeReports(base, [{ id: "claude", read: async () => own }], noSettings, context());
+  assert.deepEqual(report.providers[0].notice, notice);
 });
 
 test("settings merge the config file with the environment", async () => {

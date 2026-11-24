@@ -48,7 +48,7 @@ export async function mergeReports(
     }
     const error = own.state?.error ?? own.state?.status ?? "no windows";
     // Nothing better than quota-axi: keep its entry (or ours, when quota-axi had none) and say why.
-    if (current) providers[index] = { ...current, usageLimitsError: error };
+    if (current) providers[index] = { ...current, usageLimitsError: error, ...(own.notice ? { notice: own.notice } : {}) };
     else providers.push(own);
     fallbacks.push({ provider: adapter.id, reason, outcome: "kept_quota_axi", error });
   }

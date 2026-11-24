@@ -37,6 +37,10 @@ model-specific limits. Use quota-axi for data and the Herdr theme for the interf
   from a numeric `percentRemaining`. Keep its id, label, kind, reset time and duration.
 - Cache normalized results in `usage-limits.data`, errors in `usage-limits.error` and preferences in
   `usage-limits.options`. `usage-limits.refresh` requests an immediate read. Do not save credentials.
+- A provider with a `notice` ({message, action}) and no windows stays in the strip even when
+  signed-out providers are hidden: its dimmed icon, the action in amber ("Run /login" for Claude)
+  and the full message in the tooltip. Usage lists it after the readable providers with the
+  message and the action; Display shows the same text under it.
 - Keep the last successful data on a fetch error. Show errors in the popup; fade results to
   60% opacity after ten minutes. Distinguish loading, empty and failed states.
 - Defaults: session, weekly and monthly limits on; model limits, provider names, signed-out

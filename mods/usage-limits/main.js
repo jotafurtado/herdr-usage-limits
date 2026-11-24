@@ -22,6 +22,10 @@ function options() {
 }
 const setOptions = change => setShared("usage-limits.options", { ...options(), ...change });
 const signedIn = p => p.windows.length > 0;
+// A provider that can't be read but has something the person can do about it (Claude with a setup token: /login).
+const needsAction = p => !signedIn(p) && Boolean(p.notice);
+const WARN = "#f2c14e", WARN_LIGHT = "#c98a0b";
+const warn = () => settings().dark !== false ? WARN : WARN_LIGHT;
 
 // Calm until it matters: green, amber from 60%, orange from 80%, red from 92%.
 function level(pct) {
@@ -84,6 +88,7 @@ async function load() {
     at: Date.now(),
     providers: (data.providers ?? []).map(p => ({
       id: p.provider, label: NAMES[p.provider] ?? p.label ?? p.provider, plan: p.plan ?? null, status: p.state?.status ?? null,
+      notice: p.notice?.message && p.notice?.action ? { message: p.notice.message, action: p.notice.action } : null,
       windows: (p.windows ?? []).map(w => ({ ...w, percentUsed: Number.isFinite(w.percentUsed) ? w.percentUsed : Number.isFinite(w.percentRemaining) ? 100 - w.percentRemaining : null })).filter(w => Number.isFinite(w.percentUsed))
         .map(w => ({ id: w.id, label: w.label, kind: w.kind, percentUsed: w.percentUsed, resetsAt: w.resetsAt ?? null, windowSeconds: w.windowSeconds ?? null })),
     })),
@@ -145,17 +150,19 @@ export default class UsageLimits extends View {
     const stale = !data || now - data.at > STALE;
     const list = (data?.providers ?? []).filter(p => !o.hidden.includes(p.id) && (signedIn(p)
       ? visibleWindows(p, o).some(w => o.kinds[w.kind] ?? false)
-      : o.signedOut));
+      : o.signedOut || needsAction(p)));
     const parts = [];
     list.forEach((p, i) => {
       if (i > 0) parts.push(div().w(1).h(12).flex_none().bg(t.border));
       const windows = visibleWindows(p, o).filter(w => o.kinds[w.kind] ?? false);
       parts.push(h_flex().id(`q-${p.id}`).gap(9).items_center().flex_none()
-        .tooltip(windows.map(w => `${p.label} ${w.label}: ${w.percentUsed}% used${w.resetsAt && Date.parse(w.resetsAt) > now ? `, resets in ${until(w.resetsAt, now)}` : ""}`).join("\n") || `${p.label}: no usage limits available`)
+        .tooltip(needsAction(p) ? `${p.label}: ${p.notice.message} ${p.notice.action}.`
+          : windows.map(w => `${p.label} ${w.label}: ${w.percentUsed}% used${w.resetsAt && Date.parse(w.resetsAt) > now ? `, resets in ${until(w.resetsAt, now)}` : ""}`).join("\n") || `${p.label}: no usage limits available`)
         .child(h_flex().gap(5).items_center()
           .child(this.glyph(p, 12, t))
           .when(o.names || !ICONS[p.id], el => el.child(div().max_w(110).truncate().tooltip(p.label).text_color(signedIn(p) ? t.muted : t.dim).child(p.label))))
-        .when(!signedIn(p), el => el.child(div().size(6).rounded(3).border_1().border_color(t.dim)))
+        .when(needsAction(p), el => el.child(div().text_size(TYPE.strip).text_color(warn()).child(p.notice.action.startsWith("Run /login") ? "Run /login" : "Action needed")))
+        .when(!signedIn(p) && !needsAction(p), el => el.child(div().size(6).rounded(3).border_1().border_color(t.dim)))
         .children(windows.map(w => {
           const pc = pace(w, now);
           return h_flex().gap(5).items_center()
@@ -190,7 +197,8 @@ export default class UsageLimits extends View {
       () => setOptions({ hidden: o.hidden.includes(p.id) ? o.hidden.filter(id => id !== p.id) : [...o.hidden, p.id] }), "prov-" + p.id, false, this.glyph(p, 13, t)))
       .when(p.id === "agy", el => el.child(div().ml(15).pl(9).border_l(1).border_color(t.border).child(toggle("Claude/GPT limits", o.agyClaudeGpt,
         () => setOptions({ agyClaudeGpt: !o.agyClaudeGpt }), "agy-claude-gpt", o.hidden.includes(p.id)))))
-      .when(!signedIn(p), el => el.child(div().pl(54).pb(6).text_size(TYPE.caption).text_color(t.muted).child(({ auth_required: "Sign-in required", error: "Unable to fetch usage", unavailable: "Usage unavailable", stale: "Outdated usage data" })[p.status] ?? "No usage available")));
+      .when(needsAction(p), el => el.child(div().pl(54).pb(6).text_size(TYPE.caption).text_color(warn()).child(`${p.notice.message} ${p.notice.action}.`)))
+      .when(!signedIn(p) && !needsAction(p), el => el.child(div().pl(54).pb(6).text_size(TYPE.caption).text_color(t.muted).child(({ auth_required: "Sign-in required", error: "Unable to fetch usage", unavailable: "Usage unavailable", stale: "Outdated usage data" })[p.status] ?? "No usage available")));
     const details = p => v_flex().flex_none().px(8).py(12).gap(6).border_b(1).border_color(t.border)
       .child(h_flex().gap(8).items_center().child(this.glyph(p, 14, t)).child(div().flex_1().min_w(0).truncate().font_semibold().tooltip(p.label).child(p.label))
         .child(div().max_w(120).truncate().text_size(TYPE.caption).text_color(t.muted).tooltip(p.plan ?? "").child(p.plan ?? "")))
@@ -198,6 +206,10 @@ export default class UsageLimits extends View {
         .child(h_flex().gap(8).items_center().child(div().flex_1().min_w(0).truncate().text_size(TYPE.body).tooltip(w.label ?? w.kind).child(w.label ?? w.kind))
           .when(!o.percentageOnly, el => el.child(bar(w, 100, 4, now, t))).child(div().w(40).flex_none().text_right().text_size(TYPE.body).text_color(w.percentUsed >= 60 ? level(w.percentUsed) : t.foreground).child(Math.round(w.percentUsed) + "%")))
         .when(Boolean(w.resetsAt && Date.parse(w.resetsAt) > now), el => el.child(div().text_size(TYPE.caption).text_color(t.muted).child("Resets in " + until(w.resetsAt, now))))));
+    const noticeBlock = p => v_flex().flex_none().px(8).py(12).gap(6).border_b(1).border_color(t.border)
+      .child(h_flex().gap(8).items_center().child(this.glyph(p, 14, t)).child(div().flex_1().min_w(0).truncate().font_semibold().tooltip(p.label).child(p.label)))
+      .child(div().text_size(TYPE.body).text_color(t.muted).child(p.notice.message))
+      .child(div().text_size(TYPE.body).font_semibold().text_color(warn()).child(p.notice.action));
     const disclosure = (label, key, children) => v_flex().flex_none()
       .child(h_flex().id(key).h(32).flex_none().px(8).gap(9).items_center()
         .when(key === "unavailableProviders", el => el.mt(4).border_t(1).border_color(t.border))
@@ -207,6 +219,7 @@ export default class UsageLimits extends View {
         .child(div().flex_1().min_w(0).truncate().child(label)))
       .when(Boolean(this[key]), el => el.children(children));
     const usage = v_flex().flex_none().w_full().pr(12).children(available.filter(p => !o.hidden.includes(p.id)).map(details))
+      .children(unavailable.filter(p => needsAction(p) && !o.hidden.includes(p.id)).map(noticeBlock))
       .when(available.some(p => o.hidden.includes(p.id)), el => el.child(disclosure("Other providers", "otherProviders", available.filter(p => o.hidden.includes(p.id)).map(details))))
       .when(!available.length, el => el.child(div().p(8).text_color(t.muted).child(error ? "Unable to load usage limits. Try Refresh." : data ? "No usage limits available from your providers." : "Loading usage limits…")));
     const display = v_flex().flex_none().w_full().pr(12).child(heading("Providers", true)).children(available.map(providerControl))

@@ -19,8 +19,15 @@ export interface ProviderState {
   [extra: string]: unknown;
 }
 
+// Something the person can do to make a provider readable again, shown by the mod.
+export interface ProviderNotice {
+  message: string;
+  action: string;
+}
+
 export interface ProviderReport {
   provider: string;
+  notice?: ProviderNotice;
   label?: string;
   plan?: string;
   source?: string;

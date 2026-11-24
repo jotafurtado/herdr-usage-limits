@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { AdapterContext, ProviderAdapter, ProviderReport, LimitWindow } from "../types.js";
+import type { AdapterContext, ProviderAdapter, ProviderNotice, ProviderReport, LimitWindow } from "../types.js";
 
 // Same endpoint and headers Claude Code uses for /usage.
 const USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
@@ -9,6 +9,17 @@ const KEYCHAIN_SERVICE = "Claude Code-credentials";
 const FIVE_HOURS_SECONDS = 18_000;
 const SEVEN_DAYS_SECONDS = 604_800;
 const TIMEOUT_MS = 15_000;
+const SETUP_TOKEN_ERROR = "setup_token_without_usage_scope";
+const LOGIN = "Run /login in Claude Code";
+
+// What the mod tells the person, by failure. Every Claude sign-in problem ends in /login.
+export function noticeFor(status: string, error: string): ProviderNotice | undefined {
+  if (error === SETUP_TOKEN_ERROR) return { message: "A setup token can't read usage limits.", action: LOGIN };
+  if (error.includes("signed_out")) return { message: "Claude Code is signed out. A setup token can't read usage limits.", action: LOGIN };
+  if (error.startsWith("token_expired")) return { message: "The Claude Code session expired.", action: "Open Claude Code to renew it" };
+  if (status === "auth_required") return { message: "No Claude Code sign-in found.", action: LOGIN };
+  return undefined;
+}
 
 interface ClaudeCredential {
   source: "env" | "credentials-file" | "keychain";
@@ -139,7 +150,10 @@ export function normalizeUsage(raw: unknown): LimitWindow[] {
 }
 
 function failure(status: string, error: string, attempts: string[]): ProviderReport {
-  return { provider: "claude", label: "Claude", source: "usage-limits", windows: [], state: { status, stale: false, error }, attempts };
+  const report: ProviderReport = { provider: "claude", label: "Claude", source: "usage-limits", windows: [], state: { status, stale: false, error }, attempts };
+  const notice = noticeFor(status, error);
+  if (notice) report.notice = notice;
+  return report;
 }
 
 async function fetchUsage(context: AdapterContext, credential: ClaudeCredential): Promise<{ windows: LimitWindow[] } | { status: string; error: string }> {
@@ -157,6 +171,8 @@ async function fetchUsage(context: AdapterContext, credential: ClaudeCredential)
   } catch (error) {
     return { status: "unavailable", error: `network: ${error instanceof Error ? error.message : String(error)}` };
   }
+  // A token from `claude setup-token` only carries the inference scope; the usage endpoint refuses it.
+  if (credential.source === "env" && (response.status === 401 || response.status === 403)) return { status: "auth_required", error: SETUP_TOKEN_ERROR };
   if (response.status === 401) return { status: "auth_required", error: "unauthorized" };
   if (!response.ok) return { status: response.status === 429 ? "rate_limited" : "error", error: `http_${response.status}` };
   const windows = normalizeUsage(await response.json().catch(() => undefined));
@@ -172,7 +188,7 @@ export const claudeAdapter: ProviderAdapter = {
       if (lookup.status === "absent") { attempts.push(`${lookup.source}: missing`); continue; }
       if (lookup.status === "invalid") {
         attempts.push(`${lookup.source}: ${lookup.error}`);
-        lastFailure = { status: "auth_required", error: `${lookup.source} ${lookup.error}` };
+        if (lastFailure.error !== SETUP_TOKEN_ERROR) lastFailure = { status: "auth_required", error: `${lookup.source} ${lookup.error}` };
         continue;
       }
       const { credential } = lookup;
@@ -180,7 +196,7 @@ export const claudeAdapter: ProviderAdapter = {
       // Claude Code renews the token itself the next time it runs.
       if (credential.expiresAt !== undefined && credential.expiresAt <= context.now()) {
         attempts.push(`${credential.source}: expired`);
-        lastFailure = { status: "auth_required", error: "token_expired (open Claude Code to renew it)" };
+        if (lastFailure.error !== SETUP_TOKEN_ERROR) lastFailure = { status: "auth_required", error: "token_expired (open Claude Code to renew it)" };
         continue;
       }
       const result = await fetchUsage(context, credential);
@@ -194,7 +210,8 @@ export const claudeAdapter: ProviderAdapter = {
         return report;
       }
       attempts.push(`${credential.source}: ${result.error}`);
-      lastFailure = result;
+      // The setup token is the reason worth telling; a signed-out Keychain after it says less.
+      if (lastFailure.error !== SETUP_TOKEN_ERROR) lastFailure = result;
     }
     return failure(lastFailure.status, lastFailure.error, attempts);
   },
