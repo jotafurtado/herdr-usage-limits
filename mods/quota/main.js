@@ -1,7 +1,7 @@
-// Agent Quota in the status bar: one slim bar per limit window, from `quota-axi --json`.
+// Agent Quota in the status bar: one slim bar per limit window, from `quota-plus --json` (or `quota-axi --json`).
 // Click it for details and options. The same mod draws the popup (props().menu).
 import { View, div, svg, image } from "gpui-kit";
-import { runQuotaCommand } from "./quota-command.js";
+import { runQuotaCommand, SHELL_SCRIPT } from "./quota-command.js";
 import { visibleWindows } from "./quota-windows.js";
 import { h_flex, v_flex } from "gpui-base";
 import { exec, theme, settings, shared, setShared, props, openOverlay, knownAgents, nextCommand } from "herdr";
@@ -76,8 +76,8 @@ function bar(w, width, height, now, t) {
 async function load() {
   let r = await runQuotaCommand(exec).catch(e => ({ code: -1, stderr: String(e) }));
   // Apps started from the Dock miss PATH entries set in the shell's rc file (npm, nvm, mise): ask the person's own shell.
-  if (r.code !== 0) r = await exec("sh", ["-c", 'exec "${SHELL:-/bin/sh}" -lic "quota-axi --json --allow-keychain-prompt" </dev/null']).catch(e => ({ code: -1, stderr: String(e) }));
-  if (r.code !== 0) throw new Error(`quota-axi failed: ${(r.stderr || "").trim().split("\n").pop() || `exit ${r.code}`}`);
+  if (r.code !== 0) r = await exec("sh", ["-c", `exec "\${SHELL:-/bin/sh}" -lic '${SHELL_SCRIPT}' </dev/null`]).catch(e => ({ code: -1, stderr: String(e) }));
+  if (r.code !== 0) throw new Error(`quota failed: ${(r.stderr || "").trim().split("\n").pop() || `exit ${r.code}`}`);
   // An interactive shell can print a banner first; the report starts at the first brace.
   const data = JSON.parse(r.stdout.slice(r.stdout.indexOf("{")));
   return {

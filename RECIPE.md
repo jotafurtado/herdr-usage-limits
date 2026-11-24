@@ -30,7 +30,8 @@ model-specific limits. Use quota-axi for data and the Herdr theme for the interf
 
 ## Behavior
 
-- Run `quota-axi --json --allow-keychain-prompt` at startup, every two minutes and on Refresh. Query the local machine.
+- Run `quota-plus --json` at startup, every two minutes and on Refresh; when quota-plus is not
+  installed, run `quota-axi --json --allow-keychain-prompt`. Query the local machine.
   The flag lets quota-axi read Claude's credentials from the macOS Keychain; without it Claude reports sign-in required.
 - Normalize each window to quota used: prefer a numeric `percentUsed`, otherwise derive it
   from a numeric `percentRemaining`. Keep its id, label, kind, reset time and duration.
@@ -65,7 +66,7 @@ Use Herdr's `exec`, `theme`, `settings`, `shared`, `setShared`, `props`, `openOv
 renders the popup when `props().menu` is true. Never retain a callback's `cx` for later use.
 
 Try quota-axi directly. If it cannot start, try the fixed command
-`cmd.exe /d /s /c "quota-axi --json --allow-keychain-prompt"` for Windows npm shims. Preserve the Unix login-shell PATH
+`cmd.exe /d /s /c "<command>"` for Windows npm shims. Preserve the Unix login-shell PATH
 fallback. Never embed a personal Node installation path. Strip any shell banner before the
 first JSON object. Quota-axi, rather than this mod, performs provider network requests.
 
@@ -185,7 +186,7 @@ From the terminal, use `herdr-app do quota.menu` and `herdr-app do quota.refresh
 
 ### Data and troubleshooting
 
-The mod runs `quota-axi --json --allow-keychain-prompt` at startup, every two minutes and when you
+The mod runs `quota-plus --json` (or `quota-axi --json --allow-keychain-prompt`) at startup, every two minutes and when you
 select **Refresh**. It reads quotas on this computer, even when the active terminal belongs to a
 remote machine. On macOS, the first Claude read may show a Keychain prompt; choose **Always Allow**.
 A quota-axi or Node upgrade can make macOS ask again.
@@ -198,7 +199,7 @@ The mod makes no direct network requests. Quota-axi contacts providers using its
 credential sources. Agent Quota saves normalized quota results, plan names, errors and display
 preferences in Herdr's local shared state. It does not save access tokens.
 
-If the strip says **Quota unavailable**, run `quota-axi --json --allow-keychain-prompt` and check your PATH and sign-ins.
+If the strip says **Quota unavailable**, run `quota-plus --explain` (or `quota-axi --json --allow-keychain-prompt`) and check your PATH and sign-ins.
 If no quotas appear, check the provider and limit filters in Display. A faded strip means its
 cached data is more than ten minutes old. Many visible limits can exceed the available strip
 width; allocate more space, hide limits or use percentage-only mode.

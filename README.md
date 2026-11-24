@@ -62,6 +62,26 @@ If a provider is missing, check the filters in Display. On macOS, Claude's sign-
 Keychain: approve the prompt with **Always Allow** if it appears. Your agent can check the dependency
 and provider sign-ins when needed. Agent Quota reuses existing sign-ins and does not save access tokens.
 
+## quota-plus: filling gaps in quota-axi
+
+quota-axi stays the data source. `quota-plus` (in `cli/`) runs `quota-axi --json` and, for each
+provider quota-axi could not read (no windows, or `auth_required`, `error`, `unavailable`), tries
+this repository's own adapter for that provider. When the adapter also fails, quota-axi's entry is
+kept, with the reason in `quotaPlusError`. The mod runs `quota-plus` when it is installed and falls
+back to `quota-axi` otherwise, so quota-axi updates keep flowing in without changes here.
+
+```sh
+npm install && npm run build && npm install -g .   # installs the quota-plus command
+quota-plus --explain                              # JSON on stdout, fallback decisions on stderr
+```
+
+Adapters: `claude` (environment token, `~/.claude/.credentials.json` or the macOS Keychain, then
+Anthropic's OAuth usage endpoint). It never refreshes tokens, which would sign Claude Code out.
+To always use an adapter, or never, set `{"force": ["claude"], "disable": []}` in
+`~/.config/quota-plus/config.json`, or `QUOTA_PLUS_FORCE` / `QUOTA_PLUS_DISABLE`.
+To add one, write `cli/providers/<id>.ts` implementing `ProviderAdapter` and register it in
+`cli/adapters.ts`.
+
 ## Credits and license
 
 Independently maintained by [jotafurtado](https://github.com/jotafurtado), based on

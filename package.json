@@ -1,0 +1,27 @@
+{
+  "name": "herdr-quota",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Agent Quota for Herdr, plus quota-plus: quota-axi with per-provider fallback adapters",
+  "author": "Jota Furtado",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "quota-plus": "dist/main.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepare": "tsc -p tsconfig.json",
+    "test": "tsc -p tsconfig.json && node --test tests/"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  }
+}
