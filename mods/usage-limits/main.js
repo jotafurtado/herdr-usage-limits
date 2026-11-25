@@ -2,15 +2,15 @@
 // Click it for details and options. The same mod draws the popup (props().menu).
 import { View, div, svg, image } from "gpui-kit";
 import { runUsageCommand, SHELL_SCRIPT } from "./usage-command.js";
-import { visibleWindows } from "./limit-windows.js";
+import { visibleWindows, formatAmount, elapsedShare, levelIndex } from "./limit-windows.js";
 import { h_flex, v_flex } from "gpui-base";
-import { exec, theme, settings, shared, setShared, props, openOverlay, knownAgents, nextCommand } from "herdr";
+import { exec, theme, shared, setShared, props, openOverlay, knownAgents, nextCommand } from "herdr";
 
 const EVERY = 120000, STALE = 10 * 60000;
 const TYPE = { strip: 12, body: 12, caption: 11, title: 14 };
-const DEFAULTS = { kinds: { session: true, weekly: true, monthly: true, model: false }, hidden: [], signedOut: false, names: false, percentageOnly: false, agyClaudeGpt: false };
-const ICONS = { agy: "antigravity", claude: "claude", codex: "codex", grok: "grok", kimi: "kimi", copilot: "copilot", cursor: "cursor", commandcode: "command-code", muse: "muse" };
-const NAMES = { claude: "Claude", codex: "Codex", agy: "Antigravity", cursor: "Cursor", copilot: "GitHub Copilot", grok: "Grok", kimi: "Kimi", zai: "Z.ai", alibaba: "Alibaba Cloud", "opencode-go": "OpenCode Go", commandcode: "Command Code", minimax: "MiniMax", mimo: "MiMo", deepseek: "DeepSeek", openrouter: "OpenRouter", elevenlabs: "ElevenLabs", devin: "Devin", muse: "Muse", higgsfield: "Higgsfield" };
+const DEFAULTS = { kinds: { session: true, weekly: true, monthly: true, model: false }, hidden: [], signedOut: false, names: false, percentageOnly: false, amounts: false, agyClaudeGpt: false };
+const ICONS = { agy: "antigravity", claude: "claude", codex: "codex", grok: "grok", kimi: "kimi", copilot: "copilot", cursor: "cursor", commandcode: "command-code", muse: "muse", kiro: "kiro" };
+const NAMES = { claude: "Claude", codex: "Codex", agy: "Antigravity", cursor: "Cursor", copilot: "GitHub Copilot", grok: "Grok", kimi: "Kimi", zai: "Z.ai", alibaba: "Alibaba Cloud", "opencode-go": "OpenCode Go", commandcode: "Command Code", minimax: "MiniMax", mimo: "MiMo", deepseek: "DeepSeek", openrouter: "OpenRouter", elevenlabs: "ElevenLabs", devin: "Devin", muse: "Muse", kiro: "Kiro", higgsfield: "Higgsfield" };
 const EXTRA_ICONS = { openrouter: "openrouter", zai: "zai", alibaba: "alibabacloud", minimax: "minimax", deepseek: "deepseek", elevenlabs: "elevenlabs", devin: "devin", "opencode-go": "opencode" };
 const TINT = { claude: "#d97757", kimi: "#1783ff" };
 const KINDS = [["session", "5-hour limit"], ["weekly", "Weekly limit"], ["monthly", "Monthly limit"], ["model", "Model limits"]];
@@ -24,14 +24,13 @@ const setOptions = change => setShared("usage-limits.options", { ...options(), .
 const signedIn = p => p.windows.length > 0;
 // A provider that can't be read but has something the person can do about it (Claude with a setup token: /login).
 const needsAction = p => !signedIn(p) && Boolean(p.notice);
-const WARN = "#f2c14e", WARN_LIGHT = "#c98a0b";
-const warn = () => settings().dark !== false ? WARN : WARN_LIGHT;
+// Status colors come from the theme's terminal palette, so they follow every light and dark theme.
+const warn = () => theme().ansi3;
 
-// Calm until it matters: green, amber from 60%, orange from 80%, red from 92%.
+// Calm until it matters: green, yellow from 80%, red from 90%.
 function level(pct) {
-  const dark = settings().dark !== false;
-  const scale = dark ? ["#5ed49a", "#f2c14e", "#f59152", "#f2665c"] : ["#1f9d63", "#c98a0b", "#dd6b20", "#d64545"];
-  return scale[pct >= 92 ? 3 : pct >= 80 ? 2 : pct >= 60 ? 1 : 0];
+  const t = theme();
+  return [t.ansi2, t.ansi3, t.ansi1][levelIndex(pct)];
 }
 
 // Two windows of one kind (Cursor's monthly ones) are told apart by their own label.
@@ -42,13 +41,6 @@ function short(w, twin) {
   else if (w.kind === "monthly") period = w.windowSeconds === 30 * 86400 ? "30d" : "mês";
   else return (w.label ?? "model").split(" ")[0].slice(0, 6);
   return twin ? `${(w.label ?? w.kind).split(" ")[0]} ${period}` : period;
-}
-
-// Share of the window already gone, 0..1; null without a reset time.
-function elapsed(w, now) {
-  if (!w.resetsAt || !w.windowSeconds) return null;
-  const left = (Date.parse(w.resetsAt) - now) / 1000;
-  return Math.min(1, Math.max(0, 1 - left / w.windowSeconds));
 }
 
 function until(iso, now) {
@@ -64,17 +56,27 @@ function ago(at, now) {
 }
 
 function pace(w, now) {
-  const e = elapsed(w, now);
+  const e = elapsedShare(w, now);
   if (e === null || e < 0.03) return null;
   const diff = Math.round(w.percentUsed - e * 100);
   return { diff, ahead: diff >= 10 && w.percentUsed >= 20 };
 }
 
+// " · 12 pts ahead of pace": usage against the mark on the bar; quiet while within 5 points.
+function paceNote(w, now) {
+  const p = pace(w, now);
+  if (!p || Math.abs(p.diff) < 5) return "";
+  return ` · ${Math.abs(p.diff)} pts ${p.diff > 0 ? "ahead of" : "behind"} pace`;
+}
+
 function bar(w, width, height, now, t) {
-  const e = elapsed(w, now), pct = Math.min(100, Math.max(0, w.percentUsed));
+  const e = elapsedShare(w, now), pct = Math.min(100, Math.max(0, w.percentUsed));
+  // The pace mark: where usage would be if spread evenly over the window. A dark edge keeps it readable over the fill.
+  const mark = e === null ? null : div().absolute().top(-3).h(height + 6).w(4).left(Math.min(width - 4, Math.max(0, Math.round(width * e) - 2)))
+    .rounded(1).bg(t.chrome).flex().justify_center().child(div().w(2).h(height + 6).rounded(1).bg(t.foreground));
   return div().relative().w(width).h(height).flex_none().rounded(height / 2).bg(t.border)
-    .child(div().absolute().left(0).top(0).h(height).w(Math.max(pct > 0 ? height : 0, width * pct / 100)).rounded(height / 2).bg(level(pct)))
-    .when(e !== null, el => el.child(div().absolute().top(-2).h(height + 4).w(1).left(Math.round(width * e)).bg(t.foreground).opacity(0.45)));
+    .child(div().absolute().left(0).top(0).h(height).w(Math.max(pct > 0 ? height : 0, width * pct / 100)).rounded(height / 2).bg(t.ansi2))
+    .when(mark !== null, el => el.child(mark));
 }
 
 async function load() {
@@ -90,7 +92,7 @@ async function load() {
       id: p.provider, label: NAMES[p.provider] ?? p.label ?? p.provider, plan: p.plan ?? null, status: p.state?.status ?? null,
       notice: p.notice?.message && p.notice?.action ? { message: p.notice.message, action: p.notice.action } : null,
       windows: (p.windows ?? []).map(w => ({ ...w, percentUsed: Number.isFinite(w.percentUsed) ? w.percentUsed : Number.isFinite(w.percentRemaining) ? 100 - w.percentRemaining : null })).filter(w => Number.isFinite(w.percentUsed))
-        .map(w => ({ id: w.id, label: w.label, kind: w.kind, percentUsed: w.percentUsed, resetsAt: w.resetsAt ?? null, windowSeconds: w.windowSeconds ?? null })),
+        .map(w => ({ id: w.id, label: w.label, kind: w.kind, percentUsed: w.percentUsed, resetsAt: w.resetsAt ?? null, windowSeconds: w.windowSeconds ?? null, amount: w.amount ?? null })),
     })),
   };
 }
@@ -130,10 +132,12 @@ export default class UsageLimits extends View {
   refresh(cx) {
     if (this.loading) return;
     this.loading = true;
+    // The popup is another view: it learns about a read in progress through shared state.
+    setShared("usage-limits.loading", Date.now());
     cx.spawn(async cx => {
       try { setShared("usage-limits.data", await load()); setShared("usage-limits.error", null); }
       catch (e) { setShared("usage-limits.error", String(e.message ?? e)); }
-      finally { this.loading = false; cx.notify(); }
+      finally { this.loading = false; setShared("usage-limits.loading", null); cx.notify(); }
     });
   }
 
@@ -157,19 +161,19 @@ export default class UsageLimits extends View {
       const windows = visibleWindows(p, o).filter(w => o.kinds[w.kind] ?? false);
       parts.push(h_flex().id(`q-${p.id}`).gap(9).items_center().flex_none()
         .tooltip(needsAction(p) ? `${p.label}: ${p.notice.message} ${p.notice.action}.`
-          : windows.map(w => `${p.label} ${w.label}: ${w.percentUsed}% used${w.resetsAt && Date.parse(w.resetsAt) > now ? `, resets in ${until(w.resetsAt, now)}` : ""}`).join("\n") || `${p.label}: no usage limits available`)
+          : windows.map(w => `${p.label} ${w.label}: ${w.percentUsed}% used${o.amounts && formatAmount(w.amount) ? ` (${formatAmount(w.amount)})` : ""}${w.resetsAt && Date.parse(w.resetsAt) > now ? `, resets in ${until(w.resetsAt, now)}` : ""}`).join("\n") || `${p.label}: no usage limits available`)
         .child(h_flex().gap(5).items_center()
           .child(this.glyph(p, 12, t))
           .when(o.names || !ICONS[p.id], el => el.child(div().max_w(110).truncate().tooltip(p.label).text_color(signedIn(p) ? t.muted : t.dim).child(p.label))))
         .when(needsAction(p), el => el.child(div().text_size(TYPE.strip).text_color(warn()).child(p.notice.action.startsWith("Run /login") ? "Run /login" : "Action needed")))
         .when(!signedIn(p) && !needsAction(p), el => el.child(div().size(6).rounded(3).border_1().border_color(t.dim)))
         .children(windows.map(w => {
-          const pc = pace(w, now);
           return h_flex().gap(5).items_center()
             .child(div().max_w(110).truncate().tooltip(w.label ?? w.kind).text_size(TYPE.strip).text_color(t.muted).child(short(w, windows.filter(x => x.kind === w.kind).length > 1)))
             .when(!o.percentageOnly, el => el.child(bar(w, 34, 4, now, t)))
-            .child(div().w(36).flex_none().text_right().text_size(TYPE.strip).text_color(w.percentUsed >= 60 ? level(w.percentUsed) : t.foreground).child(`${Math.round(w.percentUsed)}%`))
-            .when(Boolean(pc?.ahead), el => el.child(div().ml(-3).text_size(8).text_color(level(Math.max(60, w.percentUsed))).child("▲")));
+            .child(div().flex_none().text_size(TYPE.strip).text_color(t.foreground).child(`${Math.round(w.percentUsed)}%`))
+            // Warning triangle: yellow from 80% used, red from 90%.
+            .when(w.percentUsed >= 80, el => el.child(div().ml(-3).text_size(8).text_color(level(w.percentUsed)).child("▲")));
         })));
     });
     return h_flex().id("usage-limits").size_full().px(12).gap(11).items_center().justify_end().overflow_hidden()
@@ -183,6 +187,7 @@ export default class UsageLimits extends View {
 
   menu(t) {
     const data = shared("usage-limits.data"), error = shared("usage-limits.error"), o = options(), now = Date.now();
+    const readingSince = shared("usage-limits.loading"), reading = Number.isFinite(readingSince) && now - readingSince < 120000;
     const all = data?.providers ?? [], available = all.filter(signedIn), unavailable = all.filter(p => !signedIn(p));
     const changeView = (key, value, cx) => { this[key] = value; cx.notify(); };
     const heading = (text, first = false) => div().when(!first, el => el.mt(8).border_t(1).border_color(t.border)).pt(first ? 6 : 12).pb(6).px(8).text_size(TYPE.caption).font_semibold().text_color(t.muted).child(text);
@@ -204,8 +209,11 @@ export default class UsageLimits extends View {
         .child(div().max_w(120).truncate().text_size(TYPE.caption).text_color(t.muted).tooltip(p.plan ?? "").child(p.plan ?? "")))
       .children(visibleWindows(p, o).map(w => v_flex().gap(4).pb(8)
         .child(h_flex().gap(8).items_center().child(div().flex_1().min_w(0).truncate().text_size(TYPE.body).tooltip(w.label ?? w.kind).child(w.label ?? w.kind))
-          .when(!o.percentageOnly, el => el.child(bar(w, 100, 4, now, t))).child(div().w(40).flex_none().text_right().text_size(TYPE.body).text_color(w.percentUsed >= 60 ? level(w.percentUsed) : t.foreground).child(Math.round(w.percentUsed) + "%")))
-        .when(Boolean(w.resetsAt && Date.parse(w.resetsAt) > now), el => el.child(div().text_size(TYPE.caption).text_color(t.muted).child("Resets in " + until(w.resetsAt, now))))));
+          .when(!o.percentageOnly, el => el.child(bar(w, 100, 4, now, t))).child(h_flex().w(48).flex_none().gap(4).items_center()
+            .child(div().text_size(TYPE.body).text_color(t.foreground).child(Math.round(w.percentUsed) + "%"))
+            .when(w.percentUsed >= 80, el => el.child(div().text_size(9).text_color(level(w.percentUsed)).child("▲")))))
+        .when(o.amounts && Boolean(formatAmount(w.amount)), el => el.child(div().text_size(TYPE.caption).text_color(t.muted).child(formatAmount(w.amount))))
+        .when(Boolean(w.resetsAt && Date.parse(w.resetsAt) > now), el => el.child(div().text_size(TYPE.caption).text_color(t.muted).child("Resets in " + until(w.resetsAt, now) + paceNote(w, now))))));
     const noticeBlock = p => v_flex().flex_none().px(8).py(12).gap(6).border_b(1).border_color(t.border)
       .child(h_flex().gap(8).items_center().child(this.glyph(p, 14, t)).child(div().flex_1().min_w(0).truncate().font_semibold().tooltip(p.label).child(p.label)))
       .child(div().text_size(TYPE.body).text_color(t.muted).child(p.notice.message))
@@ -228,19 +236,28 @@ export default class UsageLimits extends View {
       .children(KINDS.map(([kind, label]) => toggle(kind === "session" ? "Session" : kind === "model" ? "Model-specific" : kind === "weekly" ? "Weekly" : "Monthly", o.kinds[kind], () => setOptions({ kinds: { ...o.kinds, [kind]: !o.kinds[kind] } }), "kind-" + kind)))
       .child(heading("Appearance"))
       .child(toggle("Percentages only (no bars)", o.percentageOnly, () => setOptions({ percentageOnly: !o.percentageOnly }), "percentage-only"))
+      .child(toggle("Credit Amounts", o.amounts, () => setOptions({ amounts: !o.amounts }), "amounts"))
       .child(toggle("Provider names", o.names, () => setOptions({ names: !o.names }), "names"))
       .child(toggle("Show signed-out providers", o.signedOut, () => setOptions({ signedOut: !o.signedOut }), "signed-out"));
     return v_flex().id("usage-limits-menu").w_full().h(640).p(8).bg(t.popover).text_size(TYPE.body).text_color(t.foreground)
       .child(h_flex().px(8).py(6).items_center().child(div().flex_1().text_size(TYPE.title).font_semibold().child("Usage Limits"))
-        .child(div().id("usage-limits-refresh").px(8).py(4).rounded(4).cursor_pointer().text_color(t.accent).hover(el => el.bg(t.hover)).on_click(() => setShared("usage-limits.refresh", Date.now())).child("Refresh")))
+        // Same button as Herdr's own dialogs (confirm mod): raised fill, input border, 8 px radius, opacity on hover.
+        // While a read runs the button says so and ignores clicks. A mark older than the CLI's timeout is stale.
+        .child(h_flex().id("usage-limits-refresh").h(32).px(14).items_center().rounded(8).border_1().border_color(t.input).bg(t.raised).text_size(12)
+          .text_color(reading ? t.muted : t.foreground).opacity(reading ? 0.7 : 1)
+          .when(!reading, el => el.cursor_pointer().hover(s => s.opacity(0.88)).on_click(() => { setShared("usage-limits.loading", Date.now()); setShared("usage-limits.refresh", Date.now()); }))
+          .child(reading ? "Refreshing…" : "Refresh")))
       .child(div().px(8).pb(8).text_size(TYPE.caption).text_color(t.muted).child(data ? "Updated " + ago(data.at, now) : "Waiting for usage data"))
-      .child(div().pb(10).mb(4).border_b(1).border_color(t.border).child(h_flex().p(3).gap(2).rounded(7).bg(t.raised).border_1().border_color(t.border)
-        .children(["Usage", "Display"].map(tab => div().id("tab-" + tab).flex_1().h(30).flex().items_center().justify_center().rounded(4)
-          .bg((this.menuTab ?? "Usage") === tab ? t.selected : t.raised)
-          .text_color((this.menuTab ?? "Usage") === tab ? t.foreground : t.muted)
-          .when((this.menuTab ?? "Usage") === tab, el => el.font_semibold())
-          .cursor_pointer().hover(el => el.bg(t.hover))
-          .on_click((_e, cx) => changeView("menuTab", tab, cx)).child(tab)))))
+      // Underlined tabs: the open one is bright with an accent line, the other one is muted.
+      .child(h_flex().mb(4).border_b(1).border_color(t.border)
+        .children(["Usage", "Display"].map(tab => {
+          const open = (this.menuTab ?? "Usage") === tab;
+          return div().id("tab-" + tab).flex_1().h(36).flex().items_center().justify_center().text_size(13)
+            .border_b(2).border_color(open ? t.accent : t.popover)
+            .text_color(open ? t.foreground : t.muted).when(open, el => el.font_semibold())
+            .cursor_pointer().hover(el => el.text_color(t.foreground))
+            .on_click((_e, cx) => changeView("menuTab", tab, cx)).child(tab);
+        })))
       .when(Boolean(error), el => el.child(div().px(8).py(6).text_color(level(95)).child(error)))
       .child(v_flex().id("usage-limits-menu-content").flex_1().min_h(0).overflow_y_scroll().overflow_y_scrollbar().mode("always").child(this.menuTab === "Display" ? display : usage));
   }
