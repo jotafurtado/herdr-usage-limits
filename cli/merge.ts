@@ -46,6 +46,11 @@ export async function mergeReports(
       fallbacks.push({ provider: adapter.id, reason, outcome: "replaced" });
       continue;
     }
+    // The provider isn't installed here and quota-axi doesn't list it: leave it out of the report.
+    if (!current && own.notSetUp) {
+      fallbacks.push({ provider: adapter.id, reason, outcome: "skipped", error: own.state?.error ?? "not_set_up" });
+      continue;
+    }
     const error = own.state?.error ?? own.state?.status ?? "no windows";
     // Nothing better than quota-axi: keep its entry (or ours, when quota-axi had none) and say why.
     if (current) providers[index] = { ...current, usageLimitsError: error, ...(own.notice ? { notice: own.notice } : {}) };

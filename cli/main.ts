@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // usage-limits: quota-axi's report, with our own adapters filling in the providers it fails to read.
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { ADAPTERS } from "./adapters.js";
 import { mergeReports } from "./merge.js";
@@ -36,6 +36,7 @@ async function main(argv: string[]): Promise<number> {
     homeDirectory: homedir(),
     now: () => Date.now(),
     readTextFile: path => readFile(path, "utf8").catch(() => undefined),
+    pathExists: path => access(path).then(() => true, () => false),
     runCommand,
     fetch: globalThis.fetch,
   };

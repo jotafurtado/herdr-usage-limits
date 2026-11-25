@@ -1,6 +1,13 @@
 // Shapes shared with quota-axi --json (schemaVersion 5). Only the fields the mod reads are typed;
 // everything else quota-axi reports passes through untouched.
 
+// What a provider that meters in absolute units (Kiro credits) actually consumed.
+export interface LimitAmount {
+  used: number;
+  limit: number;
+  unit: string;
+}
+
 export interface LimitWindow {
   id: string;
   label: string;
@@ -9,6 +16,7 @@ export interface LimitWindow {
   percentRemaining?: number;
   resetsAt?: string;
   windowSeconds?: number;
+  amount?: LimitAmount;
   [extra: string]: unknown;
 }
 
@@ -33,6 +41,8 @@ export interface ProviderReport {
   source?: string;
   windows: LimitWindow[];
   state?: ProviderState;
+  // The provider's own CLI or app is not installed or never signed in: nothing to show, nothing to fix.
+  notSetUp?: boolean;
   [extra: string]: unknown;
 }
 
@@ -57,6 +67,7 @@ export interface AdapterContext {
   homeDirectory: string;
   now: () => number;
   readTextFile: (path: string) => Promise<string | undefined>;
+  pathExists: (path: string) => Promise<boolean>;
   runCommand: CommandRunner;
   fetch: typeof fetch;
 }
@@ -76,6 +87,6 @@ export interface UsageLimitsSettings {
 export interface FallbackRecord {
   provider: string;
   reason: "forced" | "missing" | "no_windows" | "failed_status";
-  outcome: "replaced" | "kept_quota_axi";
+  outcome: "replaced" | "kept_quota_axi" | "skipped";
   error?: string;
 }
