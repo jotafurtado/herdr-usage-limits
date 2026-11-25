@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { AdapterContext, ProviderAdapter, ProviderNotice, ProviderReport, LimitWindow } from "../types.js";
+import { finiteNumber, makeWindow, record, slugify, text } from "./shared.js";
 
 // Same endpoint and headers Claude Code uses for /usage.
 const USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
@@ -32,18 +33,6 @@ type CredentialLookup =
   | { status: "found"; credential: ClaudeCredential }
   | { status: "absent"; source: ClaudeCredential["source"] }
   | { status: "invalid"; source: ClaudeCredential["source"]; error: string };
-
-function record(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
-}
-
-function text(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function finiteNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
 
 // `security -w` prints the secret as hex when it holds bytes it does not consider printable.
 export function decodeSecret(raw: string): string {
@@ -94,22 +83,6 @@ async function lookups(context: AdapterContext): Promise<CredentialLookup[]> {
     found.push(result.code === 0 ? parseCredentialBlob(result.stdout, "keychain") : { status: "absent", source: "keychain" });
   }
   return found;
-}
-
-function clampPercent(value: number): number {
-  return Math.min(100, Math.max(0, Math.round(value * 100) / 100));
-}
-
-function makeWindow(id: string, label: string, kind: string, used: number, resetsAt: string | undefined, windowSeconds: number | undefined): LimitWindow {
-  const percentUsed = clampPercent(used);
-  const window: LimitWindow = { id, label, kind, percentUsed, percentRemaining: clampPercent(100 - percentUsed) };
-  if (resetsAt !== undefined) window.resetsAt = resetsAt;
-  if (windowSeconds !== undefined) window.windowSeconds = windowSeconds;
-  return window;
-}
-
-function slugify(value: string): string {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
 function scopedWindow(raw: unknown): LimitWindow | undefined {
