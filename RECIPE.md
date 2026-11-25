@@ -14,13 +14,13 @@ model-specific limits. Use quota-axi for data and the Herdr theme for the interf
   duration is exactly 2592000 seconds, otherwise `mês`. Keep window names when a provider has
   multiple limits of the same kind.
 - A popup, 380 px wide and 640 px tall, with Usage Limits, Refresh, the update age, and tabs
-  labeled Usage and Display. Scroll the tab content inside the fixed-height popup.
+  labeled Usage and Display, drawn as underlined tabs: the open one is bright and semibold with an accent line. Scroll the tab content inside the fixed-height popup.
 - Usage: each available provider has an icon, name and optional plan, followed by its limits,
   usage percentages, optional 100 x 4 px bars and future reset countdowns. Providers hidden
   from the strip live in a collapsed Other providers group.
 - Display: available providers, an Antigravity Claude/GPT sub-option, a collapsed Unavailable
   providers group, Session/Weekly/Monthly/Model-specific checkboxes, and appearance controls
-  for Percentages only (no bars), Provider names and Show signed-out providers.
+  for Percentages only (no bars), Credit Amounts, Provider names and Show signed-out providers.
 - Use the bundled check glyph and the theme's accent for selected checkboxes. Keep unavailable
   provider explanations visible when that group is expanded.
 - Use 12 px text for both period labels and percentages, in the strip and limit rows.
@@ -33,10 +33,13 @@ model-specific limits. Use quota-axi for data and the Herdr theme for the interf
 - Run `usage-limits --json` at startup, every two minutes and on Refresh; when usage-limits is not
   installed, run `quota-axi --json --allow-keychain-prompt`. Query the local machine.
   The flag lets quota-axi read Claude's credentials from the macOS Keychain; without it Claude reports sign-in required.
+- A window may carry `amount` ({used, limit, unit}, Kiro credits). With Credit Amounts on, show
+  it as `1,861 of 10,000 credits` under the limit row in Usage and in the strip tooltip; the strip
+  itself stays percentage-only. Format the numbers by hand: the mod runtime has no Intl.
 - Normalize each window to percentage used: prefer a numeric `percentUsed`, otherwise derive it
   from a numeric `percentRemaining`. Keep its id, label, kind, reset time and duration.
 - Cache normalized results in `usage-limits.data`, errors in `usage-limits.error` and preferences in
-  `usage-limits.options`. `usage-limits.refresh` requests an immediate read. Do not save credentials.
+  `usage-limits.options`. `usage-limits.refresh` requests an immediate read; `usage-limits.loading` holds the start time of a read in progress (cleared when it ends; ignored after two minutes), and the popup's Refresh button shows `Refreshing…`, dimmed and inert, while it is set. Do not save credentials.
 - A provider with a `notice` ({message, action}) and no windows stays in the strip even when
   signed-out providers are hidden: its dimmed icon, the action in amber ("Run /login" for Claude)
   and the full message in the tooltip. Usage lists it after the readable providers with the
@@ -44,18 +47,21 @@ model-specific limits. Use quota-axi for data and the Herdr theme for the interf
 - Keep the last successful data on a fetch error. Show errors in the popup; fade results to
   60% opacity after ten minutes. Distinguish loading, empty and failed states.
 - Defaults: session, weekly and monthly limits on; model limits, provider names, signed-out
-  providers, Antigravity Claude/GPT limits and percentage-only mode off; no hidden providers.
+  providers, Antigravity Claude/GPT limits, credit amounts and percentage-only mode off; no hidden providers.
 - Layout props supply starting choices. Saved popup choices win, including nested kind
   preferences. Apply changes immediately without closing the popup or mutating cached data.
 - Kind filters affect the status strip. Usage retains available limits for inspection.
   The Antigravity sub-option hides only `agy` windows with ids beginning `claude_gpt_` in
   both views; preserve Gemini and the standalone Claude provider.
 - Percentage-only mode removes bars and their ticks from both views. Retain numbers, labels,
-  reset countdowns, usage colors and the status-strip pace warning.
-- Usage colors, dark/light: below 60% green `#5ed49a`/`#1f9d63`, from 60% amber
-  `#f2c14e`/`#c98a0b`, from 80% orange `#f59152`/`#dd6b20`, from 92% red `#f2665c`/`#d64545`.
-- When a duration is known, place a thin tick at elapsed-window share. Add a small triangle
-  when usage is at least 20% and at least ten percentage points ahead of elapsed time.
+  reset countdowns, usage colors and the status-strip warning triangle.
+- Colors come from the theme, never hard-coded. Bars are always `ansi2` (green) and percentages stay in the
+  foreground color; only the `▲` carries the warning, `ansi3` (yellow) from 80% and `ansi1` (red) from 90%,
+  after the percentage in the strip and in the popup. Pace never triggers the triangle: the tick on the bar carries it.
+- Place a 2 px tick with a dark edge at the elapsed-window share on every bar with a future reset time.
+  quota-axi's default JSON omits durations: assume 5 h for sessions, 7 d for weeks, 30 d for months.
+  The percentage sits right after its bar, left-aligned. The popup adds `N pts ahead of` or `behind pace`
+  after the reset countdown from 5 points of difference.
 - Bind `usage-limits:menu` and `usage-limits:refresh` as optional key actions. CLI mod commands use dots:
   `herdr-app do usage-limits.menu` and `herdr-app do usage-limits.refresh`.
 
@@ -164,7 +170,7 @@ integration for the user rather than asking them to perform the manual steps bel
 ### Defaults and layout props
 
 Session, weekly and monthly limits are enabled by default. Model-specific limits, provider
-names, signed-out providers, Antigravity Claude/GPT limits and percentage-only mode are disabled.
+names, signed-out providers, Antigravity Claude/GPT limits, credit amounts and percentage-only mode are disabled.
 
 The usage-limits block's `content.props` can supply starting preferences:
 
@@ -176,6 +182,7 @@ The usage-limits block's `content.props` can supply starting preferences:
     "names": true,
     "hidden": ["cursor"],
     "agyClaudeGpt": false,
+    "amounts": false,
     "kinds": { "session": true, "weekly": true, "monthly": true, "model": false }
   }
 }
